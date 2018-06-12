@@ -1,0 +1,11 @@
+#!/bin/sh
+set -ex
+
+if [[ "$PLATFORM" = "ios" ]]; then
+	OPT="--disable-fontconfig \
+		--disable-require-system-font-provider \
+		--enable-directwrite"
+fi
+$SRCPATH/libass*/configure $OPTHIONS $OPT
+							
+make install

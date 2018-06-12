@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+ROOT="$(pwd)"
+export SRCPATH="$ROOT/src"
+
+scripts/fribidi-clean
+scripts/freetype-clean
+scripts/harfbuzz-clean
+scripts/libass-clean
+scripts/mpv-clean
+
+rm -rf $ROOT/build-*

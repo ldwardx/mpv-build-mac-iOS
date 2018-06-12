@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+PREFIX="${OPTHIONS%% *}"
+PREFIX="${PREFIX##*=}"
+
+OPT="-DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Release"
+
+if [[ "$PLATFORM" = "ios" ]]; then
+	OPT="$OPT -DBUILD_SHARED_LIBS=false"
+fi
+
+cmake $SRCPATH/uchardet*
+cmake $SRCPATH/uchardet* $OPT && make
+make install

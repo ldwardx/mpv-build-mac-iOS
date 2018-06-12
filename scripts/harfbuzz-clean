@@ -1,0 +1,7 @@
+#!/bin/sh
+set -ex
+
+cd $SRCPATH/harfbuzz*
+if [[ -f Makefile ]]; then
+	make distclean
+fi

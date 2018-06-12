@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+$SRCPATH/freetype*/configure $OPTHIONS \
+							--with-zlib=yes \
+							--without-png \
+							--with-bzip2=no
+make install

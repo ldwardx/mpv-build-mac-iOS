@@ -1,0 +1,233 @@
+#!/bin/sh
+set -e
+
+export PLATFORM="macosx"
+MODULES="uchardet fribidi freetype harfbuzz libass ffmpeg mpv"
+
+info()
+{
+     local green="\033[1;32m"
+     local normal="\033[0m"
+     echo "[${green}info${normal}] $1"
+}
+
+usage()
+{
+cat << EOF
+usage: $0 [-p platform] [-d] [-s]
+
+OPTHIONS
+  -h  Show help
+  -p  Platform (iOS|macosx)
+  -s  Build for iOS simulator #todo:
+  -d  Enable debug #todo:
+  -b  Enable bitcode
+  -v  Be more verbose
+  -m  Specify which modules to be build (uchardet|fribidi|freetype|harfbuzz|libass|ffmpeg|mpv)
+EOF
+}
+
+dylib_process()
+{
+	local LIB="$1"
+	DIRNAME=`dirname "$LIB"`
+	LIBNAME=`basename "$LIB"`
+	install_name_tool -id "$RPATH/$LIBNAME" "$LIB"
+	for INSTLNAME in $(otool -L $LIB | grep -e '\t' | awk '{ print $1 }'); do
+		BASENAME=`basename "$INSTLNAME"`
+		if [[ 
+			$INSTLNAME == $SYSTEMPRE || 
+			$INSTLNAME == $USRLIBPRE || 
+			$INSTLNAME == $EXEPRE || 
+			$INSTLNAME == *libobjc.* || 
+			$INSTLNAME == *libSystem.* || 
+			$INSTLNAME == *libc.* || 
+			$INSTLNAME == *libgcc.* || 
+			$INSTLNAME == *$LIBNAME* || 
+			$BASENAME = "Python"
+			]]; then
+			continue
+		fi
+		install_name_tool -change "$INSTLNAME" "$RPATH/$BASENAME" "$LIB"
+		if ! ls | grep -q "$BASENAME"; then
+			info "$BASENAME not found,$LIBNAME depends on it,copy it"
+			DST="$DIRNAME/$BASENAME"
+			cp -av "$INSTLNAME" "$DST"
+			if [[ -L "$INSTLNAME" ]]; then
+				cp -av "`dirname $INSTLNAME`/`readlink $INSTLNAME`" "$DIRNAME"
+			fi
+			chmod 755 "$DST"
+			dylib_process "$DST"
+		fi
+	done
+}
+
+while getopts "hp:sdbvm:" OPTHION; do
+	case $OPTHION in
+		h )
+			usage
+			exit 1
+			;;
+		p )
+			PLATFORM=$(echo "$OPTARG" | awk '{print tolower($0)}')
+			;;
+		s )
+			BUILD_SIMULATOR=yes
+			;;
+		d )
+			CONFIGURATION="Debug"
+			;;
+		b )
+			BITCODE=yes
+			;;
+		v )
+			VERBOSE=yes
+			;;
+		m )
+			MODULES=$OPTARG
+			;;
+		? )
+			info "Find unrecognized opthion"
+			usage
+			exit 1
+			;;
+	esac
+done
+
+if [[ "$PLATFORM" != "ios" && "$PLATFORM" != "macosx" ]]; then
+	info 'Platform parameter error,must be "iOS" or "macosx"'
+	exit 1
+fi
+
+if [[ "$VERBOSE" = "yes" ]]; then
+	set -ex
+fi
+
+ROOT="$(pwd)"
+SCRIPTS="$ROOT/scripts"
+BUILD="$ROOT/build-$PLATFORM"
+LIBS="$BUILD/libs"
+SCRATCH="$BUILD/scratch"
+THIN="$BUILD/thin"
+export SRCPATH="$ROOT/src"
+
+mkdir -p $LIBS $THIN
+
+SYSTEMPRE="/System*"
+USRLIBPRE="/usr/lib/*"
+EXEPRE="@executable_path*"
+RPATH="@rpath"
+
+export LC_ALL=C
+export LDFLAGS
+export CFLAGS
+export CXXFLAGS
+export PKG_CONFIG_PATH
+export ARCHFLAG
+export OPTHIONS
+
+if [[ "$PLATFORM" = "ios" ]]; then
+	LIBEXTENSION=".a"
+
+	ARCHS="armv7 arm64"
+	DEPLOYMENT_TARGET="8.0"
+
+	export PATH="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/:$PATH"
+	export SDKPATH="$(xcodebuild -sdk iphoneos -version Path)"
+	TCFLAGS="-isysroot $SDKPATH -mios-version-min=$DEPLOYMENT_TARGET"
+	TLDFLAGS="-isysroot $SDKPATH -Wl,-ios_version_min,$DEPLOYMENT_TARGET -lbz2"
+	TOPTHIONS="--build=x86_64-apple-darwin14 --enable-static --disable-shared \
+			--disable-dependency-tracking --with-pic"
+else
+	LIBEXTENSION=".dylib"
+
+	ARCHS="x86_64"
+	DEPLOYMENT_TARGET="10.10"
+
+	TCFLAGS="-mmacosx-version-min=$DEPLOYMENT_TARGET"
+	TLDFLAGS="$TCFLAGS"
+	TOPTHIONS="--disable-static --enable-shared --with-pic"
+fi
+
+for ARCH in $ARCHS; do
+	LDFLAGS="$TLDFLAGS -arch $ARCH"
+	CFLAGS="$TCFLAGS -arch $ARCH"
+	CXXFLAGS="$CFLAGS"
+	ARCHFLAG="$ARCH"
+
+	if [[ $ARCH = "arm64" ]]; then
+		HOSTFLAG="aarch64"
+	else
+		HOSTFLAG=$ARCH
+	fi
+
+	THINSUB="$THIN/$ARCH"
+	OPTHIONS="--prefix=$THINSUB --exec-prefix=$THINSUB $TOPTHIONS"
+	PKG_CONFIG_PATH="$THINSUB/lib/pkgconfig"
+	if [[ "$PLATFORM" = "ios" ]]; then
+		OPTHIONS="$OPTHIONS --host=$HOSTFLAG-apple-darwin14"
+	fi
+
+	SCRATCHSUB="$SCRATCH/$ARCH"
+	for module in $MODULES; do
+		case $module in
+			"uchardet" )
+				info "Build uchardet"
+				mkdir -p $SCRATCHSUB/uchardet && cd $_ && $SCRIPTS/uchardet-build
+				;;
+			"fribidi" )
+				info "Build fribidi"
+				mkdir -p $SCRATCHSUB/fribidi && cd $_ && $SCRIPTS/fribidi-build
+				;;
+			"freetype" )
+				info "Build freetype"
+				mkdir -p $SCRATCHSUB/freetype && cd $_ && $SCRIPTS/freetype-build
+				;;
+			"harfbuzz" )
+				info "Build harfbuzz"
+				mkdir -p $SCRATCHSUB/harfbuzz && cd $_ && $SCRIPTS/harfbuzz-build
+				;;
+			"libass" )
+				info "Build libass"
+				mkdir -p $SCRATCHSUB/libass && cd $_ && $SCRIPTS/libass-build
+				;;
+			"ffmpeg" )
+				info "Build ffmpeg"
+				mkdir -p $SCRATCHSUB/ffmpeg && cd $_ && $SCRIPTS/ffmpeg-build
+				;;
+			"mpv" )
+				info "Build mpv"
+				$SCRIPTS/mpv-build && cp $SRCPATH/mpv*/build/libmpv$LIBEXTENSION $THINSUB/lib
+				;;
+			? )
+				info "find Unrecognized module name \n Acceptable name is: $MODULES"
+				exit 1
+				;;
+				
+		esac
+	done
+done
+
+info "Lipo create"
+cd $THIN/$ARCHFLAG/lib
+for LIB in *$LIBEXTENSION; do
+	if ! [[ -L "$LIB" ]]; then
+		lipo -create `find $THIN -name $LIB` -output $LIBS/$LIB
+	else
+		cp -av "$LIB" "$LIBS/$LIB"
+	fi
+done
+
+if [[ "$PLATFORM" = "macosx" ]]; then
+	info "Install name change"
+	cd $LIBS
+	for LIB in *.dylib; do
+		if [[ ! -L "$LIB" ]]; then
+			dylib_process "$LIB"
+		fi
+	done	
+fi
+
+cp -R $SRCPATH/mpv*/libmpv $LIBS
+
+info "All done!"

@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+if [[ "$PLATFORM" = "ios" ]]; then
+	OPTS="--disable-cplayer \
+		--disable-lcms2 \
+		--disable-lua \
+		--enable-libmpv-static \
+		--enable-ios-gl \
+		--enable-gl \
+		--disable-javascript"
+else
+	OPTS="--enable-uchardet --enable-libmpv-shared"
+fi
+
+cd $SRCPATH/mpv*
+./bootstrap.py
+./waf configure $OPTS --disable-debug-build
+./waf build -j4

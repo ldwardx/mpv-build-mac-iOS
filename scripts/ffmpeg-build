@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+OPTS="${OPTHIONS%% *} \
+		--disable-lzma \
+		--disable-securetransport \
+		--disable-debug \
+		--disable-programs \
+		--disable-doc \
+		--enable-pic"
+
+if [[ "$PLATFORM" = "ios" ]]; then
+	if [[ ! `which gas-preprocessor.pl` ]]; then
+		curl -L https://github.com/libav/gas-preprocessor/raw/master/gas-preprocessor.pl -o /usr/local/bin/gas-preprocessor.pl \
+			&& chmod +x /usr/local/bin/gas-preprocessor.pl
+	fi
+
+	$SRCPATH/ffmpeg*/configure $OPTS \
+			--target-os=darwin \
+			--arch=$ARCHFLAG \
+			--extra-cflags="$CFLAGS" \
+			--enable-cross-compile
+else
+	$SRCPATH/ffmpeg*/configure $OPTS \
+								--disable-static \
+								--enable-shared
+fi
+
+make -j4 install

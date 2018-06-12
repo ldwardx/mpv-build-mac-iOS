@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+$SRCPATH/fribidi*/configure $OPTHIONS \
+							--disable-docs
+make install

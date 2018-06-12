@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+$SRCPATH/harfbuzz*/configure $OPTHIONS \
+							--with-icu=no \
+							--with-glib=no \
+							--with-fontconfig=no \
+							--with-coretext=yes
+make install
